@@ -1,0 +1,72 @@
+name: Bootstrap and verify ToolDeck
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  bootstrap:
+    if: github.event.pull_request.head.ref == 'feature/initial-mvp'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/initial-mvp
+          fetch-depth: 0
+
+      - name: Detect bootstrap archive
+        id: archive
+        run: |
+          if [ -f .tooldeck-bootstrap.tar.gz ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Extract source archive
+        if: steps.archive.outputs.exists == 'true'
+        run: |
+          tar -xzf .tooldeck-bootstrap.tar.gz
+          rm -f .tooldeck-bootstrap.tar.gz
+          rm -f .github/workflows/bootstrap.yml
+
+      - name: Set up JDK 17
+        if: steps.archive.outputs.exists == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        if: steps.archive.outputs.exists == 'true'
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 36
+        if: steps.archive.outputs.exists == 'true'
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Set up Gradle
+        if: steps.archive.outputs.exists == 'true'
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+
+      - name: Verify source
+        if: steps.archive.outputs.exists == 'true'
+        run: gradle --no-daemon testDebugUnitTest lintDebug assembleDebug
+
+      - name: Commit verified source tree
+        if: steps.archive.outputs.exists == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: 实现 ToolDeck 安卓原生工具中心"
+          git push origin HEAD:feature/initial-mvp
