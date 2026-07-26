@@ -23,8 +23,10 @@ class ToolDeckState(
     var history by mutableStateOf(preferences.loadHistory())
         private set
 
-    var themeMode by mutableStateOf(preferences.loadThemeMode())
-        private set
+    private var currentThemeMode by mutableStateOf(preferences.loadThemeMode())
+
+    val themeMode: String
+        get() = currentThemeMode
 
     fun toggleFavorite(toolId: String) {
         favorites = if (toolId in favorites) favorites - toolId else favorites + toolId
@@ -65,7 +67,7 @@ class ToolDeckState(
     }
 
     fun setThemeMode(mode: String) {
-        themeMode = mode
+        currentThemeMode = mode
         preferences.saveThemeMode(mode)
     }
 
