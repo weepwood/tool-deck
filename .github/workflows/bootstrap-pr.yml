@@ -40,36 +40,64 @@ jobs:
           rm -f .tooldeck-bootstrap.tar.gz .tooldeck-bootstrap.fixed.tar.gz .tooldeck-bootstrap.part-*
           rm -f .github/workflows/bootstrap.yml
 
+      - name: Detect Android project
+        id: project
+        run: |
+          if [ -f settings.gradle.kts ] && [ -f app/build.gradle.kts ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up JDK 17
-        if: steps.archive.outputs.exists == 'true'
+        if: steps.project.outputs.exists == 'true'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Set up Android SDK
-        if: steps.archive.outputs.exists == 'true'
+        if: steps.project.outputs.exists == 'true'
         uses: android-actions/setup-android@v3
 
       - name: Install Android SDK 36
-        if: steps.archive.outputs.exists == 'true'
+        if: steps.project.outputs.exists == 'true'
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
       - name: Set up Gradle
-        if: steps.archive.outputs.exists == 'true'
+        if: steps.project.outputs.exists == 'true'
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.13"
 
-      - name: Verify source
-        if: steps.archive.outputs.exists == 'true'
-        run: gradle --no-daemon testDebugUnitTest lintDebug assembleDebug
-
-      - name: Commit verified source tree
-        if: steps.archive.outputs.exists == 'true'
+      - name: Verify source and preserve diagnostics
+        id: verify
+        if: steps.project.outputs.exists == 'true'
+        shell: bash
         run: |
+          set +e
+          gradle --no-daemon testDebugUnitTest lintDebug assembleDebug 2>&1 | tee build-diagnostics.log
+          STATUS=${PIPESTATUS[0]}
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Commit expanded source and diagnostics
+        if: steps.project.outputs.exists == 'true'
+        run: |
+          if [ "${{ steps.verify.outputs.status }}" = "0" ]; then
+            rm -f build-diagnostics.log
+            MESSAGE="feat: 实现 ToolDeck 安卓原生工具中心"
+          else
+            MESSAGE="chore: 保存 ToolDeck 构建诊断"
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "feat: 实现 ToolDeck 安卓原生工具中心"
-          git push origin HEAD:feature/initial-mvp
+          if ! git diff --cached --quiet; then
+            git commit -m "$MESSAGE"
+            git push origin HEAD:feature/initial-mvp
+          fi
+
+      - name: Fail when verification failed
+        if: steps.project.outputs.exists == 'true' && steps.verify.outputs.status != '0'
+        run: exit 1
