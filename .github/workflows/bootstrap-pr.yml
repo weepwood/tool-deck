@@ -38,7 +38,6 @@ jobs:
           echo "75ad19448c12555b1daf7a281809f9a09c94bd15295baa70151bb0378a5da8d3  .tooldeck-bootstrap.fixed.tar.gz" | sha256sum --check
           tar -xzf .tooldeck-bootstrap.fixed.tar.gz
           rm -f .tooldeck-bootstrap.tar.gz .tooldeck-bootstrap.fixed.tar.gz .tooldeck-bootstrap.part-*
-          rm -f .github/workflows/bootstrap.yml
 
       - name: Detect Android project
         id: project
@@ -81,9 +80,10 @@ jobs:
           echo "status=$STATUS" >> "$GITHUB_OUTPUT"
           exit 0
 
-      - name: Commit expanded source and diagnostics
+      - name: Commit expanded source without workflow files
         if: steps.project.outputs.exists == 'true'
         run: |
+          rm -f .github/workflows/ci.yml .github/workflows/release.yml
           if [ "${{ steps.verify.outputs.status }}" = "0" ]; then
             rm -f build-diagnostics.log
             MESSAGE="feat: 实现 ToolDeck 安卓原生工具中心"
