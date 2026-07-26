@@ -5,99 +5,34 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
-  pull-requests: read
+  contents: read
 
 jobs:
-  bootstrap:
+  verify:
     if: github.event.pull_request.head.ref == 'feature/initial-mvp'
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 30
 
     steps:
-      - name: Checkout feature branch
+      - name: Checkout pull request
         uses: actions/checkout@v4
-        with:
-          ref: feature/initial-mvp
-          fetch-depth: 0
-
-      - name: Detect complete bootstrap payload
-        id: archive
-        run: |
-          COUNT=$(find . -maxdepth 1 -name '.tooldeck-bootstrap.part-*' | wc -l)
-          if [ "$COUNT" -eq 8 ]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Reassemble and extract source archive
-        if: steps.archive.outputs.exists == 'true'
-        run: |
-          cat .tooldeck-bootstrap.part-* | base64 --decode > .tooldeck-bootstrap.fixed.tar.gz
-          echo "75ad19448c12555b1daf7a281809f9a09c94bd15295baa70151bb0378a5da8d3  .tooldeck-bootstrap.fixed.tar.gz" | sha256sum --check
-          tar -xzf .tooldeck-bootstrap.fixed.tar.gz
-          rm -f .tooldeck-bootstrap.tar.gz .tooldeck-bootstrap.fixed.tar.gz .tooldeck-bootstrap.part-*
-
-      - name: Detect Android project
-        id: project
-        run: |
-          if [ -f settings.gradle.kts ] && [ -f app/build.gradle.kts ]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Set up JDK 17
-        if: steps.project.outputs.exists == 'true'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Set up Android SDK
-        if: steps.project.outputs.exists == 'true'
         uses: android-actions/setup-android@v3
 
       - name: Install Android SDK 36
-        if: steps.project.outputs.exists == 'true'
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
       - name: Set up Gradle
-        if: steps.project.outputs.exists == 'true'
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.13"
 
-      - name: Verify source and preserve diagnostics
-        id: verify
-        if: steps.project.outputs.exists == 'true'
-        shell: bash
-        run: |
-          set +e
-          gradle --no-daemon testDebugUnitTest lintDebug assembleDebug 2>&1 | tee build-diagnostics.log
-          STATUS=${PIPESTATUS[0]}
-          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
-          exit 0
-
-      - name: Commit expanded source without workflow files
-        if: steps.project.outputs.exists == 'true'
-        run: |
-          rm -f .github/workflows/ci.yml .github/workflows/release.yml
-          if [ "${{ steps.verify.outputs.status }}" = "0" ]; then
-            rm -f build-diagnostics.log
-            MESSAGE="feat: 实现 ToolDeck 安卓原生工具中心"
-          else
-            MESSAGE="chore: 保存 ToolDeck 构建诊断"
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          if ! git diff --cached --quiet; then
-            git commit -m "$MESSAGE"
-            git push origin HEAD:feature/initial-mvp
-          fi
-
-      - name: Fail when verification failed
-        if: steps.project.outputs.exists == 'true' && steps.verify.outputs.status != '0'
-        run: exit 1
+      - name: Unit tests, lint and APK build
+        run: gradle --no-daemon testDebugUnitTest lintDebug assembleDebug
