@@ -21,20 +21,23 @@ jobs:
           ref: feature/initial-mvp
           fetch-depth: 0
 
-      - name: Detect bootstrap archive
+      - name: Detect complete bootstrap payload
         id: archive
         run: |
-          if [ -f .tooldeck-bootstrap.tar.gz ]; then
+          COUNT=$(find . -maxdepth 1 -name '.tooldeck-bootstrap.part-*' | wc -l)
+          if [ "$COUNT" -eq 8 ]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Extract source archive
+      - name: Reassemble and extract source archive
         if: steps.archive.outputs.exists == 'true'
         run: |
-          tar -xzf .tooldeck-bootstrap.tar.gz
-          rm -f .tooldeck-bootstrap.tar.gz
+          cat .tooldeck-bootstrap.part-* | base64 --decode > .tooldeck-bootstrap.fixed.tar.gz
+          echo "75ad19448c12555b1daf7a281809f9a09c94bd15295baa70151bb0378a5da8d3  .tooldeck-bootstrap.fixed.tar.gz" | sha256sum --check
+          tar -xzf .tooldeck-bootstrap.fixed.tar.gz
+          rm -f .tooldeck-bootstrap.tar.gz .tooldeck-bootstrap.fixed.tar.gz .tooldeck-bootstrap.part-*
           rm -f .github/workflows/bootstrap.yml
 
       - name: Set up JDK 17
